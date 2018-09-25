@@ -1,0 +1,402 @@
+---
+title: "MA678 Homework 2"
+author: "Megha Pandit"
+date: "Septemeber 16, 2018"
+output:
+  pdf_document: default
+---
+
+\newcommand{\mat}[1]{\boldsymbol{#1}} 
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+\newcommand{\rv}[1]{\underline{#1}}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,dev="CairoPNG",fig.align = "center", 
+                      fig.width = 5.656, fig.height = 4, global.par = TRUE)
+pacman::p_load("arm","data.table","Cairo","faraway","foreign","ggplot2","knitr")
+par (mar=c(3,3,2,1), mgp=c(2,.7,0), tck=-.01)
+```
+
+# Introduction 
+In homework 2 you will fit many regression models.  You are welcome to explore beyond what the question is asking you.  
+
+Please come see us we are here to help.
+
+## Data analysis 
+
+### Analysis of earnings and height data
+
+The folder `earnings` has data from the Work, Family, and Well-Being Survey (Ross, 1990).
+You can find the codebook at http://www.stat.columbia.edu/~gelman/arm/examples/earnings/wfwcodebook.txt
+```{r}
+gelman_dir <- "http://www.stat.columbia.edu/~gelman/arm/examples/"
+heights    <- read.dta (paste0(gelman_dir,"earnings/heights.dta"))
+```
+
+Pull out the data on earnings, sex, height, and weight.
+
+1. In R, check the dataset and clean any unusually coded data.
+
+```{r}
+gelman_dir <- "http://www.stat.columbia.edu/~gelman/arm/examples/"
+dt <- read.dta (paste0(gelman_dir,"earnings/heights.dta"))
+
+#Removing the data points for which earnings are NA
+d <- na.omit(dt)
+
+#Removing data points for which the year born is after 1990
+d <- d[d$yearbn < 90,]
+
+#Changing the yearbn column to age for easier interpretation
+d$yearbn <- 90 - d$yearbn
+names(d)[8] <- paste("age")
+
+#Removing the height1 and height2 columns since they are redundant
+d <- d[-c(2,3)]
+
+#Factorizing the education variable into categories
+d$ed <- d$ed[which(d$ed != 98)]
+d$ed <- d$ed[which(d$ed != 99)]
+
+#Removing data points with zero earnings
+d <- d[which(d$earn != 0),]
+rownames(d) <- 1:nrow(d)
+```
+
+2. Fit a linear regression model predicting earnings from height. What transformation should you perform in order to interpret the intercept from this model as average earnings for people with average height?
+
+```{r}
+#Fitting a regression model for predicting earnings from height
+fit <- lm(d$earn ~ d$height)
+summary(fit)
+```
+
+
+**_To interpret the intercept as average earnings for people with height, we can center the earnings and the height by subtracting their respective means from their data points._**
+**_Therefore, centering the earnings and height by subtracting their means from the data points, we get_**
+```{r}
+earn_c <- d$earn - mean(d$earn)
+height_c <- d$height -mean(d$height)
+lm_c <- lm(earn_c ~ height_c)
+plot(height_c, earn_c, col = "coral3", xlab = "height", ylab = "earnings")
+abline(lm_c, col = "darkgreen", lwd = 2)
+```
+
+3. Fit some regression models with the goal of predicting earnings from some
+combination of sex, height, and weight. Be sure to try various transformations and interactions that might make sense. Choose your preferred model and justify.
+
+```{r}
+
+#Fitting a regression model for predicting earnings from a combination of sex, height and age
+lm1 <- lm(earn ~ height + age + sex, data = d)
+summary(lm1)
+
+#Transforming the earnings into log earnings
+lmg <- lm(log(earn) ~ height + age + sex, data = d)
+```
+
+```{r}
+#Plotting the earnings against height while differentiating between 'Male' and 'Female'
+#plot(d$height, log(d$earn), col = factor(d$sex))
+#abline(lm(log(d$earn[which(d$sex == 1)]) ~ d$height[which(d$sex == 1)]))
+#abline(lm(log(d$earn[which(d$sex == 2)]) ~ d$height[which(d$sex == 2)]))
+#hist(resid(lm(d$earn ~ d$height)))
+#summary(lm(d$earn ~ d$height))
+
+#Considering the interaction of the height and sex variables
+#lm_2 <- lm(log(d$earn) ~ d$height + d$age + d$sex + d$height:d$sex)
+#summary(lm_2)
+#hist(resid(lm_2))
+#plot(lm_2)
+```
+
+**_Considering the interaction between height and sex variables does not explain the variation in earnings very well, since the coefficient estimates of height and sex and even the interaction coefficient do not seem to be statistically significant._**
+
+**_Therefore, Plotting the earnings against age while categorizing the sex variable into 'Male' and 'Female', we see that the difference in slopes for males and females is very distinct. Hence, we can consider an interaction between the age and sex variables._**
+
+**_Owing to the large variation in earnings, i.e., from 200 - 200,000 dollars, a log transformation on the earnings would improve the fit and also make the interpretability easier. Also, since the ages have quite a range of variability, performing a log transformation on the ages may make interpreting the coefficients easier._**
+
+```{r}
+
+plot(log(d$age), log(d$earn), col = factor(d$sex), xlab = "log(age)", ylab = "log(earn)")
+abline(lm(log(d$earn[which(d$sex == 1)]) ~ log(d$age[which(d$sex == 1)])), lwd = 2)
+abline(lm(log(d$earn[which(d$sex == 2)]) ~ log(d$age[which(d$sex == 2)])), col = "darkgreen", lwd = 2)
+legend("bottomright", c("Female", "Male"), lty = c(2,1), pch = c(1,1), col = c("red", "black") )
+hist(resid(lm(log(d$earn) ~ log(d$age))), breaks = 20)
+
+#Regressing log of earnings on height, age and sex, considering the interaction between age and sex, 
+height_c <- (d$height - mean(d$height))/sd(d$height)
+age_c <- d$age - 17
+sex_c <- d$sex - 1
+lm_1 <- lm(log(earn) ~ height_c + log(age_c) + log(age_c):sex_c, data = d)
+summary(lm_1)
+hist(resid(lm_1))
+plot(lm_1)
+```
+**_Having an R-Squared value of around 0.178,this model explains the 17.8% of the variation in earnings. The intercept and slope coefficients have small standard errors relative to their estimates and are statistically significant. Though the coefficient of sex is not statistically significant, we can keep it because the coefficient of interaction between log age and sex explains a decent amount of the variation in log earnings._**
+
+4. Interpret all model coefficients.
+
+**_Intercept_**
+**_The intercept is the predicted log earnings if height and sex are zero, and age is 1. It does not make sense to consider the height being zero. Therefore, the heights can be scaled to have a mean of 0 and standard deviation of 1. The ages can be centered around 17. Therefore, for a male of 18 years of age whose height is 66.91 inches, the predicted log earnings is 8.77. Predicted earnings = exp of 8.70 = 6438.17_**
+
+**_height Coefficient_**
+**_The coefficient of height is the difference in the predicted log earnings for a difference of one standard deviation in height. For a male of age 18 and a difference of 3.84 inches in height, the estimated predictive difference in earnings is 10.4%_**
+
+**_log age Coefficient_**
+**_The coefficient of log age is the predicted difference in earnings for a 1% difference in age. For a 10% difference in age, the predicted earnings differ by 4%._**
+
+**_Interaction Coefficient_**
+**_The log age sex interaction coefficient is the difference in slopes predicting the log earnings on age, comparing males to females. An increase in the age corresponds to a decrease in the earnings while going from males to females._**
+
+5. Construct 95% confidence interval for all model coefficients and discuss what they mean.
+
+```{r}
+confint(lm_1, level = 0.95)
+```
+**_Since none of the confidence intervals cross 0, there is evidence that the predictor variables and the response variable are related. We can be confident that if we perform the same regression 100 times, in 95 out of the 100 times, the above intervals will contain the true values of the coefficients we estimated._**
+
+
+### Analysis of mortality rates and various environmental factors
+
+The folder `pollution` contains mortality rates and various environmental factors from 60 U.S. metropolitan areas from McDonald, G.C. and Schwing, R.C. (1973) 'Instabilities of regression estimates relating air pollution to mortality', Technometrics, vol.15, 463-482. 
+
+Variables, in order:
+
+* PREC   Average annual precipitation in inches
+* JANT   Average January temperature in degrees F
+* JULT   Same for July
+* OVR65  % of 1960 SMSA population aged 65 or older
+* POPN   Average household size
+* EDUC   Median school years completed by those over 22
+* HOUS   % of housing units which are sound & with all facilities
+* DENS   Population per sq. mile in urbanized areas, 1960
+* NONW   % non-white population in urbanized areas, 1960
+* WWDRK  % employed in white collar occupations
+* POOR   % of families with income < $3000
+* HC     Relative hydrocarbon pollution potential
+* NOX    Same for nitric oxides
+* SO@    Same for sulphur dioxide
+* HUMID  Annual average % relative humidity at 1pm
+* MORT   Total age-adjusted mortality rate per 100,000
+
+For this exercise we shall model mortality rate given nitric oxides, sulfur dioxide, and hydrocarbons as inputs. This model is an extreme oversimplification as it combines all sources of mortality and does not adjust for crucial factors such as age and smoking. We use it to illustrate log transformations in regression.
+
+```{r}
+gelman_dir   <- "http://www.stat.columbia.edu/~gelman/arm/examples/"
+pollution    <- read.dta (paste0(gelman_dir,"pollution/pollution.dta"))
+```
+
+1. Create a scatterplot of mortality rate versus level of nitric oxides. Do you think linear regression will fit these data well? Fit the regression and evaluate a residual plot from the regression.
+
+```{r, fig.width = 3, fig.height=3, fig.show= 'hold'}
+gelman_dir   <- "http://www.stat.columbia.edu/~gelman/arm/examples/"
+p <- read.dta (paste0(gelman_dir,"pollution/pollution.dta"))
+lm <- lm(p$mort ~ p$nox)
+plot(p$nox, p$mort, col = "darkorchid3", xlab = "Nitric Oxides Level", ylab = "Mortality Rate")
+abline(lm, col = "mediumseagreen", lwd = 2)
+res1 <- resid(lm)
+hist(res1, breaks = 30)
+plot(p$nox, res1)
+```
+**_Linear regression does not fit the data well as seen from the regression plot of mortality rate on nitric oxide levels._**
+
+
+2. Find an appropriate transformation that will result in data more appropriate for linear regression. Fit a regression to the transformed data and evaluate the new residual plot.
+
+**_Taking log of the nitric oxide levels and mortality rates makes the data more appropriate for linear regression._** 
+```{r}
+lm_n <- lm(log(mort) ~ log(nox), data = p)
+plot(log(p$nox), log(p$mort), col = "darkorchid3", xlab = "Nitric Oxide Levels", ylab = "Mortality Rate")
+abline(lm_n, col = "mediumseagreen", lwd = 2)
+summary(lm_n)
+res_n <- resid(lm_n)
+```
+
+```{r, fig.width = 3, fig.height = 3, fig.show= 'hold'}
+plot(log(p$nox), res_n, xlab = "Log Nitric Oxide Levels", ylab = "Residuals")
+plot(lm_n)
+```
+**_The residuals Vs. nitric oxide levels shows that the residuals are randomly distributed. But the residuals vs fitted plot shows a parabolic trend of the residuals which may be due to a few outliers that exist, or may be due to the presence of the predictor variable in squared form._**
+
+
+3. Interpret the slope coefficient from the model you chose in 2.
+
+**_The slope coefficient is the percentage of predicted difference in mortality rate for a 1% difference in the nitric oxide level. For a 10% increase in the nitric oxide level, the mortality rate increases by 0.15%_**
+
+4. Construct 99% confidence interval for slope coefficient from the model you chose in 2 and interpret them.
+
+```{r}
+confint(lm_n, level = 0.99)
+```
+**_The confidence intervalfor the slope coefficient shows that if we perform the regression a 100 times, in 99 times out of 100, the interval will contain the true value of the slope coefficient that we estimated. But, the confidence interval for the slope coefficient crosses 0, which implies that the predictor and response variables may not be well related._**
+
+5. Now fit a model predicting mortality rate using levels of nitric oxides, sulfur dioxide, and hydrocarbons as inputs. Use appropriate transformations when
+helpful. Plot the fitted regression model and interpret the coefficients.
+
+```{r, fig.width=3, fig.height=3, fig.show='hold'}
+lm_4 <- lm(log(mort) ~ nox + log(so2) + hc, data = p)
+summary(lm_4)
+plot(lm_4)
+```
+**_The intercept is the predicted log mortality rate for zero nitric oxide and hydrocarbon levels, and a sulphur dioxide level of 1. Mortality rate = exp of 6.8 = 897.84_**
+**_The nox coefficient is the predicted difference in the log mortality rate when so2 is 1 and hc is zero. exp of 0.003 = 1.003 which implies that for a unit difference in nox level, the mortality rate changes by .3%._**
+**_The log so2 coefficient is the predicted difference in mortality rate for a 1% difference in the so2 level, when the nox and hc levels are 0. For an increase of 10% in so2, the mortality rate increases by 0.1%_**
+**_The hc coefficient is the predicted difference in the estimated mortality rate when so2 is i and nox is 0. exp of -0.0017 = 0.99 implies that for a unit increase in the hc level, the estimated mortality rate decreases by around 1%_**
+
+
+6. Cross-validate: fit the model you chose above to the first half of the data and then predict for the second half. (You used all the data to construct the model in 4, so this is not really cross-validation, but it gives a sense of how the steps of cross-validation can be implemented.)
+
+```{r}
+train <- p[c(1:30),]
+test <- p[c(31:60),]
+fit <- lm(log(mort) ~ nox + log(so2) + hc, data = train)
+predict(fit)
+predict(fit, newdata = test, type = "response")
+```
+
+### Study of teenage gambling in Britain
+
+```{r,message =FALSE}
+teen <- data(teengamb)
+?teengamb
+```
+
+1. Fit a linear regression model with gamble as the response and the other variables as predictors and interpret the coefficients. Make sure you rename and transform the variables to improve the interpretability of your regression model.
+
+**_Since income has a skewed distribution, we do a log transformation on income._**
+```{r}
+data(teengamb)
+log.income <- log(teengamb$income)
+lm_5 <- lm(gamble ~ verbal + log.income +  status + sex, data = teengamb)
+summary(lm_5)
+```
+
+
+2. Create a 95% confidence interval for each of the estimated coefficients and discuss how you would interpret this uncertainty.
+
+```{r}
+confint(lm_5, level = 0.95)
+```
+**_According to the intervals shown, the interval for the intercept is wide and the intervals for the intercept, verbal, status and sex coefficients cross zero, rendering the coefficients statistically insignificant. In contrast, the r-squared value of around 0.45 implies that the model explains around 45% of the variation in the response variable._**
+
+3. Predict the amount that a male with average status, income and verbal score would gamble along with an appropriate 95% CI.  Repeat the prediction for a male with maximal values of status, income and verbal score.  Which CI is wider and why is this result expected?
+
+```{r}
+male_data <- teengamb[teengamb$sex == 0,]
+male_data_new <- rbind (c(mean(male_data$status), mean(male_data$income), mean(male_data$verbal)), c(max(male_data$status), max(male_data$income), max(male_data$verbal)))
+colnames(male_data_new) <- c("status", "income", "verbal")
+
+lm_p <- lm(gamble ~ status + log(income) + verbal, data = teengamb)
+predict(lm_p, newdata = as.data.frame(male_data_new), interval = "prediction", level = 0.95)
+```
+**_The confidence interval for the average values of of predictor variables is narrower than that for the maximal values. For the average values, the standard deviation, x - avg of x is zero and mathematically, the confidence interval is narrower. When values deviate largely from the mean, they have a larger standard deviation which gives a wider confidence interval._**
+
+### School expenditure and test scores from USA in 1994-95
+
+```{r}
+data(sat)
+?sat
+```
+
+1. Fit a model with total sat score as the outcome and expend, ratio and salary as predictors.  Make necessary transformation in order to improve the interpretability of the model.  Interpret each of the coefficient.
+
+```{r}
+data(sat)
+sats <- as.data.frame(sat)
+lm_6 <- lm(log(total) ~ expend + ratio + log(salary), data = sats)
+summary(lm_6)
+hist(resid(lm_6), breaks = 10)
+```
+**_Intercept- The intercept is the predicted log total score when the current expenditure is zero, the average pupil to teacher ratio is zero and the salary is 1._**
+**_Expenditure Coefficient- The expend coefficient is the predicted difference in log total score for a unit change in the expenditure per pupil, when average pupil to teacher is zero and salary is 1. exp of 0.018 = 1.019 implies that the predicted difference in total score for a unit difference in expenditure is 1.9%._**
+**_Average Pupil to Teacher Ratio Coefficient- When expenditure is 0 and salary is 1, the ratio coefficient is the predicted difference in log total score for a unit change in the ratio. exp of 0.0075 = 1.007 implies that for a unit change in the average ratio of pupil to teacher, the totl score changes by 0.7%._**
+**_log salary Coefficient- The log salary coefficient is the predicted difference in log total score when expenditure and average pupil to teacher ratio are 0. For a 10% increase in salary, the predicted total score decreases by 3.4%._**
+
+2. Construct 98% CI for each coefficient and discuss what you see.
+
+```{r}
+confint(lm_6, level = 0.98)
+```
+**_The confidence intervals for the expenditure, ratio and the salary coefficients cross zero rendering the coefficients statistically insignificant. Only the intercept is statistically significant. In 98 out of 100 times the regression is performed, the interval will contain the true value of the intercept we are estimating through the regression model._**
+
+3. Now add takers to the model.  Compare the fitted model to the previous model and discuss which of the model seem to explain the outcome better?
+
+```{r}
+lm_7 <- lm(log(total) ~ expend + ratio + log(salary) + takers, data = sats)
+summary(lm_7)
+```
+**_The addition of takers variable boosted teh R-Squared value of the model from 0.22 to 0.82 implying that the new model explains 82% of the variation in total score as compared to 22% for the previous fit. The coefficient of takers has a small standard error comapred to its estimate and is statistically significant to explain the variation in total score. But, the other three predictor variables continue to remain statistically insignificant._**
+
+
+# Conceptual exercises.
+
+### Special-purpose transformations:
+
+For a study of congressional elections, you would like a measure of the relative amount of money raised by each of the two major-party candidates in each district. Suppose that you know the amount of money raised by each candidate; label these dollar values $D_i$ and $R_i$. You would like to combine these into a single variable that can be included as an input variable into a model predicting vote share for the Democrats.
+
+Discuss the advantages and disadvantages of the following measures:
+
+* The simple difference, $D_i-R_i$
+
+**_The difference between_** $D_{i}$ and $R_{i}$ } **_could be a good measure because it is symmetric and centered. But, this measure is not proportional. For example, if the average money raised by the parties is 7million and 5 million, the difference Di - Ri is 2million. If the money raised were 3million and 1 million, the same difference would have corresponded to a much closer gap in the first case than in the second case._**
+
+* The ratio, $D_i/R_i$
+
+**_This measure is not very appropriate because it is centered at 1. If the Ri is much larger than Di, then the ratio tends to zero and it tends to infinity when Di is much larger than Ri._**
+
+* The difference on the logarithmic scale, $log D_i-log R_i$ 
+
+**_This measure is similar to the first measure but it is proportional in terms of the magnitude of difference in the money raised by both the parties, i.e., a 2million difference will have  a lesser value even when the counties raise 100million. This measure is less sensitive to outliers as well._**
+
+* The relative proportion, $D_i/(D_i+R_i)$.
+
+**_This measure is centered at 0.5 and is symmetric. When Ri is much larger than Di, the ratio tends to zero but when Di is much larger than Ri, the ratio tends to 1._**
+
+### Transformation 
+
+For observed pair of $\mathrm{x}$ and $\mathrm{y}$, we fit a simple regression model 
+$$\mathrm{y}=\alpha + \beta \mathrm{x} + \mathrm{\epsilon}$$ 
+which results in estimates $\hat{\alpha}=1$, $\hat{\beta}=0.9$, $SE(\hat{\beta})=0.03$, $\hat{\sigma}=2$ and $r=0.3$.
+
+1. Suppose that the explanatory variable values in a regression are transformed according to the $\mathrm{x}^{\star}=\mathrm{x}-10$ and that $\mathrm{y}$ is regressed on $\mathrm{x}^{\star}$.  Without redoing the regression calculation in detail, find $\hat{\alpha}^{\star}$, $\hat{\beta}^{\star}$, $\hat{\sigma}^{\star}$, and $r^{\star}$.  What happens to these quantities when $\mathrm{x}^{\star}=10\mathrm{x}$ ? When $\mathrm{x}^{\star}=10(\mathrm{x}-1)$?
+
+**_When x is transformed to x - 10, the slope coefficient remains intact but the intercept changes._** 
+$\hat{\alpha}^{\star}$ = 10
+**_The intercept will now correspond to the value of the predicted y when x = 10._**
+$\hat{\beta}^{\star}$ **_is equal to the value of_** $\hat{\beta}=0.9$
+$\hat{\sigma}^{\star}$ **_remains the same as_** $\hat{\sigma}=2$
+
+**_When_** $\mathrm{x}^{\star}=10\mathrm{x}$, **_the intercept remains the same but the slope coefficient, i.e. the coefficient of x gets scaled by 10. The_** $\hat{\beta}$ **_is now equal to 9. r is not affected by scaling._**
+
+**_For_** $\mathrm{x}^{\star}=10(\mathrm{x}-1)$, **_the intercept becomes 1.9, the slope becomes 0.09, the standard error of regression coefficient becomes 0.003 and the standard deviation becomes 0.2. The r remains intact_**
+
+
+2. Now suppose that the response variable scores are transformed according to the formula
+$\mathrm{y}^{\star\star}= \mathrm{y}+10$ and that $\mathrm{y}^{\star\star}$ is regressed on $\mathrm{x}$.  Without redoing the regression calculation in detail, find $\hat{\alpha}^{\star\star}$, $\hat{\beta}^{\star\star}$, $\hat{\sigma}^{\star\star}$, and $r^{\star\star}$.  What happens to these quantities when $\mathrm{y}^{\star\star}=5\mathrm{y}$ ? When $\mathrm{y}^{\star\star}=5(\mathrm{y}+2)$?
+
+**_For y + 10 transformation, the intercept becomes 11 and all the other coefficients remain the same. When y becomes 5y, all the coefficients become 5 times their original values. Intercept becomes 5, regression coefficient becomes 4.5, the standard error of beta becomes 0.15 and the standard deviation becomes 10._**
+**_For 5(y+2), the intercept becomes 15 and the slope coefficient becomes 4.5._**
+
+3. In general, how are the results of a simple regression analysis affected by linear transformations of $\mathrm{y}$ and $\mathrm{x}$?
+
+**_Centering x and y or adding a constant to x and y changes only the intercept and does not affect the slope/regression coefficients. Scaling x scales the slope coefficient of x but does not affect the intercept. Scaling y scales both the intercept and slope coefficients._**
+
+4. Suppose that the explanatory variable values in a regression are transformed according to the $\mathrm{x}^{\star}=10(\mathrm{x}-1)$ and that $\mathrm{y}$ is regressed on $\mathrm{x}^{\star}$.  Without redoing the regression calculation in detail, find $SE(\hat{\beta}^{\star})$ and $t^{\star}_0= \hat{\beta}^{\star}/SE(\hat{\beta}^{\star})$.
+
+**_Standard error of beta hat becomes 0.003 whereas the t value remains unchanged._**
+
+5. Now suppose that the response variable scores are transformed according to the formula
+$\mathrm{y}^{\star\star}=5(\mathrm{y}+2)$ and that $\mathrm{y}^{\star\star}$ is regressed on $\mathrm{x}$.  Without redoing the regression calculation in detail, find $SE(\hat{\beta}^{\star\star})$ and $t^{\star\star}_0= \hat{\beta}^{\star\star}/SE(\hat{\beta}^{\star\star})$.
+
+**_Standard error becomes 0.15 and the t values remains unchanged._**
+
+6. In general, how are the hypothesis tests and confidence intervals for $\beta$ affected by linear transformations of $\mathrm{y}$ and $\mathrm{x}$?
+
+**_When x=ax, beta= a(beta), the standard error of beta is also multiplied by a. Since beta is scaled by a, the confidence interval for beta become wider. When y is ay, the beta is scaled by a and hence the confidence interval for beta becomes wider._**
+
+		
+# Feedback comments etc.
+
+If you have any comments about the homework, or the class, please write your feedback here.  We love to hear your opinions.
+
