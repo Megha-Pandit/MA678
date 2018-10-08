@@ -233,6 +233,13 @@ abline(lm(log(lsalmonella$colonies) ~ log(lsalmonella$dose)))
 ```
 
 How do we adress this problem?  The serious problem to address is the nonlinear trend of dose ranther than the overdispersion since the line is missing the points.  Let's add a beny line with 4th order polynomial.
+```{r, fig.width=5, fig.height=3}
+library(ggplot2)
+ggplot(salmonella, aes(x = dose, y = colonies))+
+  geom_point()+
+  geom_smooth(method = "glm", formula = y ~ poly(x, 4, raw = TRUE))
+```
+
 
 The resulting residual looks nice and if you plot it on the raw data.  Whether the trend makes real contextual sense will need to be validated but for the given data it looks feasible.
 
