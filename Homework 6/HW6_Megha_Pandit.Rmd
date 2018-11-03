@@ -62,7 +62,6 @@ for (i in 1:nsim){
 hist(total_shots)
 summary(total_shots)
 sd(total_shots)
-total_shots
 ```
 
 3. Using your simulations, make a scatterplot of the number of shots the player will take and the proportion of shots that are successes.
