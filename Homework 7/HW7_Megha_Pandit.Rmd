@@ -1,6 +1,6 @@
 ---
-title: "homework 07"
-author: "Name"
+title: "MA678 Homework 07"
+author: "Megha Pandit"
 date: "November 1, 2018"
 output:
   pdf_document: default
@@ -162,7 +162,7 @@ fit5 <- lmer(y ~ factor(time) + (1 | newpid), data = hiv.data)
 ```{r, fig.height=3, fig.width=4}
 compare1 <- as.data.frame(cbind(unlist(ranef(fit4)), unlist(ranef(fit5))))
 
-ggplot(data = compare, aes(x = V1, y = V2))+
+ggplot(data = compare1, aes(x = V1, y = V2))+
   geom_point()+
   geom_smooth(se = FALSE)+
   xlab("Fit4 intercepts - Random effects")+ ylab("Fit5 intercepts - Random effects")
