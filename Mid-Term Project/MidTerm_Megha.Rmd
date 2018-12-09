@@ -1,0 +1,746 @@
+---
+title: "What affects Cryptocurrency Prices?"
+author: "Megha Pandit"
+date: "December 7, 2018"
+output: pdf_document
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lubridate)
+library(date)
+library(dplyr)
+library(tidytext)
+library(lme4)
+library(arm)
+library(MASS)
+library(car)
+library(esquisse)
+library(ggplot2)
+library(directlabels)
+```
+$~$
+
+#Abstract
+
+_The first half of 2018 witnessed an extremely volatile cryptocurrency market and mighty disruptions that shocked investors and common-men alike. Besides being a medium of exchange, over the years, cryptocurrencies also came to be regarded as an alternative mode of investment. This study identifies the factors associated with the variations in the price of seven trending cryptocurrencies, namely, Bitcoin, Litecoin, Ethereum, Ripple, Dogecoin, Dash, and Monero. This study examines the relationship between the cryptocurrency prices and factors such as major stock indices, currency exchange rates, commodity prices and real estate ETF and treasury yield rates. This is accomplished by fitting a linear mixed-effects model to the data. The model shows that cryptocurrency prices are impacted most by crude oil and 10-year treasury yield rates. However, given the unpredictable volatility of the cryptocurrency market, more accutrate results could be obtained by including various subjective measures such as market sentiments for modeling the data._
+
+$~$
+
+#Introduction
+
+
+  A cryptocurrency is a digital or virtual currency designed to work as a medium of exchange. It uses cryptography to secure and verify transactions as well as to control the creation of new units of a particular cryptocurrency. Essentially, cryptocurrencies are limited entries in a database that no one can change unless specific conditions are fulfilled^[1]^. In 2008, Satoshi Nakamoto, in his research paper, introduced Bitcoin as a peer-to-peer electronic cash system^[2]^. In 2009, he created Bitcoin, the world's first decentralized cryptocurrency. The first purchase made using a Bitcoin was for two pizzas procured at a cost of 10,000 Bitcoins in 2009, which are worth almost $34 million in recent times^[3]^! Cryptocurrencies have become increasingly popular since the introduction of Bitcoin. 
+
+  Bitcoin can be sent from user-to-user without any intermediaries. Bitcoin transactions are verified by cryptographic hashing and digital signatures, and recorded in a decentralized public ledger called 'Blockchain'. Bitcoin's success was an ignition to introduction of new alternative cryptocurrencies, usually referred to as 'Altcoins'. However, a huge doubt on the credibility arose with the insolvency of Mt. Gox exchange, historically the most prominent Bitcoin market, after which the Bitcoin price followed a steady decrease with low volatility^[4]^. In a span of three years from 2014, cryptocurrency prices saw fierce volatility. Bitcoin prices shot up from around 3000 to almost 20,000 USD by the end of 2017. The first half of 2018 witnessed the burst of the cryptocurrency bubble and prices crashed to less than 50% of the all time highs. Bitcoin price has been steadily decreasing since the beginning of 2018 and is almost 85% lesser than its all time high value. What causes the volatility and price variations of these cryptocurrencies?
+  
+  "Demand and Supply" would be an obvious answer. Markets can anticipate future variations in supply based on the underlying code of a cryptocurrency. Supply in the short term can vary unexpectedly but in the long term, it can be predictable by the stakeholders. Some sources suggest that cryptocurrency prices vary with the market sentiments and news. There is also a possibility that cryptocurrencies may also gain value because they entail a true innovation potential^[5]^. To better understand the factors affecting the cryptocurrency prices, this paper models the daily prices of seven trending cryptocurrencies over four years. The study takes into consideration factors such as major stock indices, currency exchange rates, crude oil prices. Since cryptocurrencies came to be considered as investment avenues, gold prices and 10-year treasury yield rates have also been considered as suitable variables. 
+  
+$~$
+
+#Data and Methods
+
+
+##Data{-}
+
+The data used in this study consists of daily values of the following variables:{-}
+- Prices and trading volumes of Bitcoin, Litecoin, Ethereum, Ripple, Dogecoin, Dash, and Monero
+- Supply of Bitcoin
+- Closing values of Dow Jones, S&P 500, and NASDAQ indices
+- Currency exchange rates: GBP/USD, Euro/USD, USD/Yen, USD/Yuan and USD/INR
+- 10-Year Treasury Yield rates
+- Gold, crude oil and real estate rates
+- Date, and time(number of years since 2013)
+
+Data on the daily prices, trading volume and supply of Bitcoin was acquired from Quandl. Daily data on the Altcoins was exported from Coingecko. Daily gold and crude oil prices, real estate rates, 10-year treasury yield rates, and the values of major stock indices were acquired from Fred Economic Data, and Yahoo! Finance. 
+
+```{r, echo=FALSE, include=FALSE, message=FALSE}
+#Integrating data from multiple sources
+
+#Reading Bitcoin and data
+Bitcoin <- read.csv("Bitcoin.csv")
+Bitcoin$Date <- mdy(Bitcoin$Date)
+
+#Reading and merging bitcoin supply data
+supply <- read_csv("Supply.csv")
+supply$Date <- mdy(supply$Date)
+
+Bitcoin_2 <- merge(Bitcoin, supply, by = "Date")
+#Reading and merging Indices data
+indices <- read_csv("Indices.csv")
+indices$Date <- mdy(indices$Date)
+
+Bitcoin_1 <- merge(Bitcoin_2, indices, by = "Date")
+
+#Reading GBP/USD exchange rate dataset
+gbpusd <- read.csv("GBPUSD.csv")
+colnames(gbpusd)[1] <- "Date"
+#Formatting Date
+gbpusd$Date <- mdy(gbpusd$Date)
+
+#Merging GBP/USD with Bitcoin dataset
+Bitcoin1 <- merge(Bitcoin_1, gbpusd, by = "Date", all = TRUE)
+Bitcoin1 <- Bitcoin1[!is.na(Bitcoin1$BTC_price),]
+
+#Reading and merging Euro/USD dataset
+eurousd <- read.csv("EuroUSD.csv")
+colnames(eurousd)[1] <- "Date"
+eurousd$Date <- mdy(eurousd$Date)
+
+Bitcoin2 <- merge(Bitcoin1, eurousd, by = "Date", all = TRUE)
+Bitcoin2 <- Bitcoin2[!is.na(Bitcoin2$BTC_price),]
+
+#Reading and merging USD/Yen dataset
+usdyen <- read.csv("USDYen.csv")
+colnames(usdyen)[1] <- "Date"
+usdyen$Date <- mdy(usdyen$Date)
+
+Bitcoin3 <- merge(Bitcoin2, usdyen, by = "Date", all = TRUE)
+Bitcoin3 <- Bitcoin3[!is.na(Bitcoin3$BTC_price),]
+
+#Reading and merging USD/Yuan dataset
+usdyuan <- read.csv("USDYuan.csv")
+colnames(usdyuan)[1] <- "Date"
+usdyuan$Date <- mdy(usdyuan$Date)
+
+Bitcoin4 <- merge(Bitcoin3, usdyuan, by = "Date", all = TRUE)
+Bitcoin4 <- Bitcoin4[!is.na(Bitcoin4$BTC_price),]
+
+#Reading and merging USD/INR dataset
+usdinr <- read.csv("USDINR.csv")
+colnames(usdinr)[1] <- "Date"
+usdinr$Date <- mdy(usdinr$Date)
+
+Bitcoin5 <- merge(Bitcoin4, usdinr, by = "Date", all = TRUE)
+Bitcoin5 <- Bitcoin5[!is.na(Bitcoin5$BTC_price),]
+
+#Reading and merging 10yr Treasury Yield Rates
+treasury1 <- read.csv("T1.csv")
+colnames(treasury1)[1] <- "Date"
+treasury1$Date <- mdy(treasury1$Date)
+treasury2 <- read.csv("T2.csv")
+colnames(treasury2)[1] <- "Date"
+treasury2$Date <- mdy(treasury2$Date)
+treasury3 <- read.csv("T3.csv")
+colnames(treasury3)[1] <- "Date"
+treasury3$Date <- mdy(treasury3$Date)
+treasury4 <- read.csv("T4.csv")
+colnames(treasury4)[1] <- "Date"
+treasury4$Date <- mdy(treasury4$Date)
+treasury5 <- read.csv("T5.csv")
+colnames(treasury5)[1] <- "Date"
+treasury5$Date <- mdy(treasury5$Date)
+treasury6 <- read.csv("T6.csv")
+colnames(treasury6)[1] <- "Date"
+treasury6$Date <- mdy(treasury6$Date)
+
+t1 <- as.data.frame(rbind(treasury1, treasury2))
+t2 <- as.data.frame(rbind(t1, treasury3))
+t3 <- as.data.frame(rbind(t2, treasury4))
+t4 <- as.data.frame(rbind(t3, treasury5))
+t5 <- as.data.frame(rbind(t4, treasury6))
+
+Bitcoin6 <- merge(Bitcoin5, t5, by = "Date", all = TRUE)
+Bitcoin6 <- Bitcoin6[!is.na(Bitcoin6$BTC_price),]
+
+#Reading and merging crude oil price dataset
+cruoil <- read.csv("CrudeOil.csv")
+colnames(cruoil)[1] <- "Date"
+cruoil$Date <- mdy(cruoil$Date)
+
+Bitcoin7 <- merge(Bitcoin6, cruoil, by = "Date", all = TRUE)
+Bitcoin7 <- Bitcoin7[!is.na(Bitcoin7$BTC_price),]
+
+#Raeding and merging gold dataset
+gold <- read.csv("Gold.csv")
+gold$Date <- mdy(gold$Date)
+colnames(gold)[2] <- "GoldDailyperOunce"
+
+Bitcoin8 <- merge(Bitcoin7, gold, by = "Date", all = TRUE)
+Bitcoin8 <- Bitcoin8[!is.na(Bitcoin8$BTC_price),]
+
+#Reading and merging real estate data
+reest <- read.csv("RealEstateETF.csv")
+reest <- reest[, -c(3)]
+reest$Date <- mdy(reest$Date)
+colnames(reest)[2] <- "RealEst"
+
+Bitcoin9 <- merge(Bitcoin8, reest, by = "Date", all = TRUE)
+Bitcoin9 <- Bitcoin9[!is.na(Bitcoin9$BTC_price),]
+
+#Reading and merging Litecoin data
+litecoin <- read_csv("Litecoin.csv")
+litecoin$Date <- mdy(litecoin$Date)
+
+Bitcoin10 <- merge(Bitcoin9, litecoin, by = "Date", all = TRUE)
+Bitcoin10 <- Bitcoin10[!is.na(Bitcoin10$BTC_price),]
+
+#Reading and merging Ethereum data
+ethereum <- read_csv("Ethereum.csv")
+ethereum$Date <- mdy(ethereum$Date)
+
+Bitcoin11 <- merge(Bitcoin10, ethereum, by = "Date", all = TRUE)
+Bitcoin11 <- Bitcoin11[!is.na(Bitcoin11$BTC_price),]
+Bitcoin11$ETH_price[is.na(Bitcoin11$ETH_price)] <- 0
+Bitcoin11$ETH_volume[is.na(Bitcoin11$ETH_volume)] <- 0
+
+#Reading and merging Ripple data
+ripple <- read_csv("Ripple.csv")
+ripple$Date <- mdy(ripple$Date)
+
+Bitcoin12 <- merge(Bitcoin11, ripple, by = "Date", all = TRUE)
+Bitcoin12 <- Bitcoin12[!is.na(Bitcoin12$BTC_price),]
+Bitcoin12$Ripple_price[is.na(Bitcoin12$Ripple_price)] <- 0
+Bitcoin12$Ripple_volume[is.na(Bitcoin12$Ripple_volume)] <- 0
+
+#Reading and merging Dogecoin data
+dogecoin <- read_csv("Dogecoin.csv")
+dogecoin$Date <- mdy(dogecoin$Date)
+
+Bitcoin13 <- merge(Bitcoin12, dogecoin, by = "Date", all = TRUE)
+Bitcoin13 <- Bitcoin13[!is.na(Bitcoin13$BTC_price),]
+Bitcoin13$Doge_price[is.na(Bitcoin13$Doge_price)] <- 0
+Bitcoin13$Doge_volume[is.na(Bitcoin13$Doge_volume)] <- 0
+
+#Reading and merging Dash data
+dash <- read_csv("Dash.csv")
+dash$Date <- mdy(dash$Date)
+
+Bitcoin14 <- merge(Bitcoin13, dash, by = "Date", all = TRUE)
+Bitcoin14 <- Bitcoin14[!is.na(Bitcoin14$BTC_price),]
+Bitcoin14$Dash_price[is.na(Bitcoin14$Dash_price)] <- 0
+Bitcoin14$Dash_volume[is.na(Bitcoin14$Dash_volume)] <- 0
+
+#Reading and merging Monero data
+monero <- read_csv("Monero.csv")
+monero$Date <- mdy(monero$Date)
+
+btc1 <- merge(Bitcoin14, monero, by = "Date", all = TRUE)
+btc1 <- btc1[!is.na(btc1$BTC_price),]
+btc1$Monero_price[is.na(btc1$Monero_price)] <- 0
+btc1$Monero_volume[is.na(btc1$Monero_volume)] <- 0
+
+btc <- btc1[btc1$Date < "2017-01-01",]
+
+#Calculating time in as number of days
+btc$days <- c()
+btc$days[1] <- 0
+for (i in 2:757) {
+  btc$days[i] <- btc$Date[i] - btc$Date[1]
+}
+btc$time <- btc$days/365
+btc$year <- substring(btc$Date,1,4)
+
+#Rearranging the columns for clarity
+btc <- btc[,c(1,32,33,2,3,4,20:31,5:19,34)]
+btc$BTC_volume <- btc$BTC_volume/btc$BTC_price
+btc$LTC_volume <- btc$LTC_volume/btc$LTC_price
+btc$ETH_volume <- btc$ETH_volume/btc$ETH_price
+btc$Ripple_volume <- btc$Ripple_volume/btc$Ripple_price
+btc$Doge_volume <- btc$Doge_volume/btc$Doge_price
+btc$Dash_volume <- btc$Dash_volume/btc$Dash_price
+btc$Monero_volume <- btc$Monero_volume/btc$Monero_price
+btc$ETH_volume[is.nan(btc$ETH_volume)] <- 0
+
+btc$EuroUSDEx <- as.numeric(as.character(btc$EuroUSDEx))
+btc$USDYenEx <- as.numeric(as.character(btc$USDYenEx))
+btc$USDINREx <- as.numeric(as.character(btc$USDINREx))
+btc$CrudeOil <- as.numeric(as.character(btc$CrudeOil))
+
+currency <- as.data.frame(btc[, c(1:34)])
+cur_btc <- currency[,c(1:6,19:34)]
+colnames(cur_btc)[4] <- "crypto_price"
+colnames(cur_btc)[5] <- "crypto_volume"
+cur_ltc <- currency[,c(1,2,3,7,8,6,19:34)]
+colnames(cur_ltc)[4] <- "crypto_price"
+colnames(cur_ltc)[5] <- "crypto_volume"
+cur_eth <- currency[,c(1,2,3,9,10,6,19:34)]
+colnames(cur_eth)[4] <- "crypto_price"
+colnames(cur_eth)[5] <- "crypto_volume"
+cur_rip <- currency[,c(1,2,3,11,12,6,19:34)]
+colnames(cur_rip)[4] <- "crypto_price"
+colnames(cur_rip)[5] <- "crypto_volume"
+cur_doge <- currency[,c(1,2,3,13,14,6,19:34)]
+colnames(cur_doge)[4] <- "crypto_price"
+colnames(cur_doge)[5] <- "crypto_volume"
+cur_dash <- currency[,c(1,2,3,15,16,6,19:34)]
+colnames(cur_dash)[4] <- "crypto_price"
+colnames(cur_dash)[5] <- "crypto_volume"
+cur_mon <- currency[,c(1,2,3,17,18,6,19:34)]
+colnames(cur_mon)[4] <- "crypto_price"
+colnames(cur_mon)[5] <- "crypto_volume"
+
+cur1 <- as.data.frame(rbind(cur_btc,cur_ltc))
+cur2 <- as.data.frame(rbind(cur1,cur_eth))
+cur3 <- as.data.frame(rbind(cur2,cur_rip))
+cur4 <- as.data.frame(rbind(cur3,cur_doge))
+cur5 <- as.data.frame(rbind(cur4,cur_dash))
+BTC <- as.data.frame(rbind(cur5,cur_mon))
+
+BTC$Currency <- c(rep(c("BTC", "LTC", "ETH", "RIP", "DOGE", "DASH", "MON"), each = 757))
+BTC$crypto_volume[is.nan(BTC$crypto_volume)] <- 0
+```
+
+###Dependent Variable: Cryptocurrency Price
+The distributions of the cryptocurrency prices are as plotted below:
+
+```{r, fig.show='hold', fig.height=3, fig.width=3, echo=FALSE, message=FALSE, warning=FALSE}
+#Histogram of Bitcoin Price from 2014 to 2017
+ggplot(btc, aes(btc$BTC_price))+
+  geom_histogram(fill = "orangered", color = "orangered4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 9),
+        axis.text = element_text(size = 7))+
+  xlab("Bitcoin Price (USD)")+ ylab("Count")+
+  ggtitle(" Fig 1.1. Histogram of Bitcoin Price")
+
+#Box plots of altcoin prices from 2014 to 2017
+
+ggplot(data = BTC[758:5299,], aes(x = Currency, y = crypto_price, fill = Currency)) +
+  geom_boxplot() +
+  theme_minimal()+
+  theme(legend.position = "none", axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 9))+
+  xlab("Cryptocurrency")+ ylab("Price (USD)")+
+  ggtitle("Fig 1.2. Altcoin Prices")
+
+```
+Fig 1.1 shows the distribution of Bitcoin price. As seen in the plot, Bitcoin price distribution is multi-modal. Similarly, the distributions of the altcoins also are multi-modal^[A1]^. 
+
+The dependent variable, cryptocurrency price, has seven groups - Bitcoin, Litecoin, Ethereum, Ripple, Dogecoin, Dash, and Monero. Fig 1.2 shows the boxplots of the altcoin prices. Bitcoin has been excluded from this plot because of the large difference in the scale of Bitcoin price and altcoin prices. Therefore, scaling the Bitcoin price may be required before modeling it. The box plot suggests that there are differences between the groups of cryptocurrencies. The prices of Dash, Ethereum, Litecoin, and Monero, all seem to be positively skewed, i.e., their higher quartiles are farther away from their medians compared to their lower quartiles. 
+
+###Independent Variables: 
+The independent variables in this study include bitcoin supply, trading volume, Dow Jones, S&P and NASDAQ indices, currency exchange rates, 10-year treasury yield rates, gold and crude oil prices. Variables such as stock market indices are scaled so that all the variables are on the same scale.
+
+The following plots explore the relationship between Bitcoin prices and some of the independent variables. All the plots show time in the number of years from 2013 on the x axis, Bitcoin price on the left-side y axis, and the independent variable values on the right-side y axis.
+```{r, echo=FALSE, fig.align='center', fig.height=3, fig.width=3, message=FALSE, fig.show='hold', warning=FALSE}
+
+#Plot of Bitcoin Price and GBP/USD and Euro/USD Exchange Rates
+g2 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "slateblue2", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = GBPUSDEx*1000), color = "slateblue4")+
+  scale_y_continuous(sec.axis = sec_axis(~./1000,name = "Exchange Rate (USD)"))+
+  geom_line(aes(x = time, y = EuroUSDEx*1000), color = "forestgreen")+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 9))+
+  ggtitle("Fig 2.1. Bitcoin Price, GBP/USD and EUR/USD Exchange\nRates from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1700), label = "GBP/USD", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 400), label = "Bitcoin", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1225), label = "Euro/USD", size = 2)
+g2
+
+#Plot of Bitcoin Price and 10-Year Treasury Yield Rates
+g7 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "palegreen1", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = TreasuryYield_10*500), color = "palegreen4")+
+  scale_y_continuous(sec.axis = sec_axis(~./500,name = "10-yr Treasury Yield Rate"))+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 9))+
+  ggtitle("Fig 2.2. Bitcoin Price and 10-yr Treasury\nYield Rate from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1300), label = "Treasury Yield", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 350), label = "Bitcoin", size = 2)
+g7
+```
+
+Fig 2.1 shows the variation in the price of Bitcoin along with the variation in the GBP/USD and EUR/USD exchange rates over time. The steady decline in GBP/USD exchange rate indicates the strengthening of the US Dollar. Bitcoin price does not seem to be following the US Dollar consistently. Nevertheless, GBP/USD and EUR/USD exchange rates seem to be correlated, which implies that only one of the two variables can be included as a predictor for modeling the data. Fig 2.2 shows the price of Bitcoin over time, along with the 10-Year Treasury Yield rates. There appears to be a relationship between the Bitcoin price and the treasury yield rate, especially from 0-1 and 2.5-3 years from 2013. But, treasury yield is the return on a government/treasury bond, and there must be a plethora of other factors affecting its rise and fall. It would be interesting to see the outcome of modeling the data while including treasury yield as an independent variable.
+
+Though supply of Bitcoin is thought of as an important factor in determining its price, the plot below suggests that Bitcoin supply may be a long-term determinant of the price of Bitcoin. Time, in years since 2013, is shown on the x axis, Bitcoin price on the right-side axis, and the supply and trading volume on the right-side y axis.
+```{r, echo=FALSE, fig.align='center', fig.height=3, fig.width=6, message=FALSE, warning=FALSE}
+
+#Plot of Bitcoin Price and Bitcoin Supply
+g3 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "chocolate1", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = BTC_supply/10000), color = "chocolate4")+
+  scale_y_continuous(sec.axis = sec_axis(~.*10000,name = "Bitcoin Supply (BTC)"))+
+  geom_line(aes(x = time, y = BTC_volume/10000), color = "black")+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 9))+
+  ggtitle("Fig 2.3. Bitcoin Price and Supply from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1550), label = "Supply", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 150), label = "Trading Volume", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 400), label = "Bitcoin Price", size = 2)
+g3
+
+```
+Fig 2.3. shows that neither supply nor trading volume seem to affect the price of Bitcoin much, in the time period of 2014 to 2017. 
+$~$
+
+#Method
+
+The data for this study is repeated measures/longitudinal in nature, i.e., the data consists of values of the same variables recorded over time. The repeated measures are nested within the type of cryptocurrency - Bitcoin, Litecoin, Ethereum, Ripple, Dogecoin, Dash and Monero. Multilevel modeling could be a good candidate for repeated measures data. Level one of the model consists of the repeated measures of each of the cyrptocurrencies and level two is the cryptocurrency. Since level one has fixed effects and level two has random effects, a Linear Mixed Effects Model is chosen to model the data. This is accomplished by using the "lmer" function in R. The lmer function models both random and fixed effects. Maximum likelihood or the restricted maximum likelihood of the parameters in linear mixed effects models can be determined using the lmer function.
+
+#Results & Discussion
+
+##Model Choice
+
+To determine which model would fit the data the best, individual plots for each of the cryptocurrencies are as below. Note that the y axis of the individual plots are all on different scales. 
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+ggplot(BTC)+ geom_point()+ aes(x = time, y = crypto_price, color = Currency)+
+  facet_wrap(~Currency, scales = "free")+ geom_smooth(method = "lm", se = FALSE, color = "black")+
+  theme(legend.position = "none", plot.title = element_text(size = 9), axis.title = element_text(size = 7))+
+  ylab("Price (USD)")+ xlab("Number of years since 2013")+
+  ggtitle("Fig 3.1. Individual Cryptocurrency Prices over time")
+  
+```
+Fig 3.1. shows each of the cryptocurrencies' journey over the years from 2013. The prices seem to have different slopes and intercepts. The next plot shows their individual slopes and intercepts. Since the scale of bitcoin prices is much larger than that of the altcoins, Bitcoin prices have been centered and scaled. 
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE, fig.height=3}
+BTC$btc_scaled[1:757] <- scale(BTC$crypto_price[1:757], center = FALSE, scale = TRUE)
+BTC$btc_scaled[758:5299] <- BTC$crypto_price[758:5299]
+ggplot(BTC, aes(x = time, y = btc_scaled, color = factor(BTC$Currency)))+
+  ylab("Price (USD)")+ xlab("Number of years since 2013")+
+  geom_smooth(method = "lm", se = FALSE)+
+  labs(color = "Cryptocurrency")+
+  ggtitle("Fig 3.2. Individual slopes of the cryptocurrency prices")
+```
+Fig 3.2 shows the individual slopes of the cryptocurrency prices. The cryptocurrency prices have different slopes and intercepts. Therefore, next, a random slopes and intercept model is fit. Since the scales of bitcoin and altcoin prices differ largely, a log transformation is done on the cryptocurrency prices to manage the scale. 
+
+
+###Model 1
+```{r, echo=FALSE}
+crypto.log <- log(BTC$crypto_price + 1)
+fit1 <- lmer(crypto.log ~ time + (time|Currency), data = BTC)
+display(fit1)
+```
+The above model gives estimates of the standrad deviations for the random effects as 2.31 for Currency and 0.40 for the residual. In order to check the assumptions of the linear mixed effects model, the residual plot is evaluated. 
+
+```{r, fig.width=3, fig.height=3, fig.align='center', echo=FALSE, warning=FALSE, message=FALSE, fig.show='hold'}
+plot(fit1, main = "Residual and Binned Residual Plots for Model 1")
+binnedplot(fitted(fit1), resid(fit1))
+```
+From the above figures, the residual and binned residual plots for the above model do not seem to justify a good fit. Therefore, the next revised model includes more individual level predictors with varying slopes. The Dow Jones Index, Gold price, crude oil price, real estate ETF rates, bitcoin supply and cryptocurrency trading volume have been scaled. 
+
+
+###Model 2
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+DJI.sc <- scale(BTC$`DJI Adj Close`)
+Gold.sc <- scale(BTC$GoldDailyperOunce)
+BTC$CrudeOil <- as.numeric(as.character(BTC$CrudeOil))
+CrudeOil.sc <- scale(BTC$CrudeOil)
+RealEst.sc <- scale(BTC$RealEst)
+supply.sc <- scale(BTC$BTC_supply)
+tv.sc <- scale(BTC$crypto_volume)
+fit2 <- lmer(crypto.log ~ time + supply.sc + DJI.sc + GBPUSDEx + TreasuryYield_10 +
+               CrudeOil.sc + Gold.sc + RealEst.sc + tv.sc + (time | Currency), data = BTC)
+display(fit2)
+```
+Since the coefficient of trading volume is zero, and this is supported by Fig 2.3, which also shows that trading volume has little effect on the cryptocurrency price, it has been excluded from the next revised model. 
+
+
+###Model 3
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+fit3 <- lmer(crypto.log ~ time + supply.sc + DJI.sc + GBPUSDEx + TreasuryYield_10 +
+               CrudeOil.sc + Gold.sc + RealEst.sc + (time | Currency), data = BTC)
+display(fit3)
+```
+The AIC and DIC are much smaller compared to those of Model1; they have come down by approximately 40%. The deviance is also smaller in Model 3 compared ot Model 1. 
+
+###Results of Model3 {-}
+Model 3 gives us the following results:
+The estimations of the standard deviations of the random effects for the intercept and slope are 2.31 USD and 0.47 years respectively. 
+
+Fixed effects:
+- Time, with a coefficient of exp(0.84) = 2.31, seems to be the variable affecting the cryptocurrency price the most. This definitely is valid because time does affect the price of cryptocurrencies. The longer a cryptocurrency has been in the market, the better the investors' trust in it and hence, the beteer the stability or variation in its price. 
+
+- Supply has a coefficient of 0.75, implying that for every increase of one standard deviation in the supply of bitcoin, the cryptocurrency price increases by 0.75 USD, holding all the variables at their average values. But, considering the large standard error of this coefficient, this coefficient does not seem to be statistically significant. As seen from Fig 2.3, supply of bitcoin may not have a significant impact on the price of cryptocurrencies. 
+
+- GBP/USD exchange rate, with a coefficient of 0.64, shows that for every 1 USD increase in the GBP/USD exchnage rate, the cryptocurrency price increases by 0.64 USD, holding all the other variables at their average values.  
+
+- Crude oil, with a coefficient of 1.32, has the second largest effect on the cryptocurrency prices, after time. This coefficient implies that with every one standard deviation increase in the crude oil price, the cryptocurrency price increases by 1.32 USD, holding all the other variables at their avergae values. 
+
+- 10-Year Treasury Yield rate has the third largest coefficient of 1.22. With all the other variables held at their average values, there is an increase of 1.22 USD in the cryptocurrency price when the 10-year treasury rate increases by 1 percentage point.  
+
+Time, Crude Oil and 10-Year Treasury Yield Rates have the largest impact on the cryptocurrency prices, compared to the other independent variables.  
+
+However, there is always a possibility that both the crude oil and bitcoin prices are dependent on other factors that may be significantly affecting their prices. Therefore, it is important to always check the fitted model.
+
+###Model Check
+The first step in model check is to look at the residuals of the model.
+```{r, fig.width=5, fig.height=3, fig.align='center', message=FALSE, warning=FALSE, echo=FALSE}
+plot(fit2, main = "4.2.Residual Plot of Model 2")
+```
+Fig 4.2 shows the residuals of Model 3. There seems to be no particular pattern in the residuals and hence, there is a possibility that the errors are independent. To check for the normality assumption, the plot below shows the Normal Q-Q Plot which shows that the residuals are quite normally distributed.
+
+```{r, echo=FALSE, fig.height=3, fig.width=5, fig.align='center'}
+qqnorm(resid(fit3))
+qqline(resid(fit3))
+```
+
+###Predictive Check for the Model
+Data from the Jan 1, 2017 to Oct 1, 2017 has been considered as the test data for prediction. The train data is the data used in Model 3. 
+```{r, fig.align='center', fig.height=6, fig.height=8, warning=FALSE, message=FALSE, echo=FALSE}
+testing <- btc1
+testing$days <- c()
+testing$days[1] <- 0
+for (i in 2:1239) {
+  testing$days[i] <- testing$Date[i] - testing$Date[1]
+}
+testing$time <- testing$days/365
+testing$year <- substring(testing$Date,1,4)
+
+testing <- testing[,c(1,32,33,2,3,4,20:31,5:19,34)]
+testing$BTC_volume <- testing$BTC_volume/testing$BTC_price
+testing$LTC_volume <- testing$LTC_volume/testing$LTC_price
+testing$ETH_volume <- testing$ETH_volume/testing$ETH_price
+testing$Ripple_volume <- testing$Ripple_volume/testing$Ripple_price
+testing$Doge_volume <- testing$Doge_volume/testing$Doge_price
+testing$Dash_volume <- testing$Dash_volume/testing$Dash_price
+testing$Monero_volume <- testing$Monero_volume/testing$Monero_price
+testing$ETH_volume[is.nan(testing$ETH_volume)] <- 0
+
+testing$EuroUSDEx <- as.numeric(as.character(testing$EuroUSDEx))
+testing$USDYenEx <- as.numeric(as.character(testing$USDYenEx))
+testing$USDINREx <- as.numeric(as.character(testing$USDINREx))
+testing$CrudeOil <- as.numeric(as.character(testing$CrudeOil))
+
+
+currency1 <- as.data.frame(testing[, c(1:34)])
+cur_btc1 <- currency1[,c(1:6,19:34)]
+colnames(cur_btc1)[4] <- "crypto_price"
+colnames(cur_btc1)[5] <- "crypto_volume"
+cur_ltc1 <- currency1[,c(1,2,3,7,8,6,19:34)]
+colnames(cur_ltc1)[4] <- "crypto_price"
+colnames(cur_ltc1)[5] <- "crypto_volume"
+cur_eth1 <- currency1[,c(1,2,3,9,10,6,19:34)]
+colnames(cur_eth1)[4] <- "crypto_price"
+colnames(cur_eth1)[5] <- "crypto_volume"
+cur_rip1 <- currency1[,c(1,2,3,11,12,6,19:34)]
+colnames(cur_rip1)[4] <- "crypto_price"
+colnames(cur_rip1)[5] <- "crypto_volume"
+cur_doge1 <- currency1[,c(1,2,3,13,14,6,19:34)]
+colnames(cur_doge1)[4] <- "crypto_price"
+colnames(cur_doge1)[5] <- "crypto_volume"
+cur_dash1 <- currency1[,c(1,2,3,15,16,6,19:34)]
+colnames(cur_dash1)[4] <- "crypto_price"
+colnames(cur_dash1)[5] <- "crypto_volume"
+cur_mon1 <- currency1[,c(1,2,3,17,18,6,19:34)]
+colnames(cur_mon1)[4] <- "crypto_price"
+colnames(cur_mon1)[5] <- "crypto_volume"
+
+cur.1 <- as.data.frame(rbind(cur_btc1,cur_ltc1))
+cur.2 <- as.data.frame(rbind(cur.1,cur_eth1))
+cur.3 <- as.data.frame(rbind(cur.2,cur_rip1))
+cur.4 <- as.data.frame(rbind(cur.3,cur_doge1))
+cur.5 <- as.data.frame(rbind(cur.4,cur_dash1))
+BTC1 <- as.data.frame(rbind(cur.5,cur_mon1))
+
+BTC1$Currency <- c(rep(c("BTC", "LTC", "ETH", "RIP", "DOGE", "DASH", "MON"), each = 1239))
+BTC1$crypto_volume[is.nan(BTC1$crypto_volume)] <- 0
+
+#Train data is the data used in the model 
+#Test data is as below
+test <- as.data.frame(BTC1[BTC1$Date > "2016-12-31" & BTC1$Date < "2017-10-01",])
+  
+test$supply.sc <- scale(test$BTC_supply)
+test$DJI.sc <- scale(test$`DJI Adj Close`)
+test$CrudeOil.sc <- scale(test$CrudeOil)
+test$Gold.sc <- scale(test$GoldDailyperOunce)
+test$RealEst.sc <- scale(test$RealEst)
+
+test$pred <- predict(fit3, test)
+test$prediction <- exp(test$pred)
+
+test <- test[, -c(31)]
+
+prediction <- as.data.frame(cbind(test$crypto_price, test$prediction))
+colnames(prediction) <- paste(c("Actual", "Predicted"))
+
+disp <- prediction[1:20,]
+disp
+```
+The table above shows the first 20 rows of the prediction made by the model. All the values are shown in Appendix 3^[A3]^.The predicted values do not seem to be anywhere close to the actual values of the cryptocurrency prices. Some sources, like Cointelegraph, say that Bitcoin prices are not affected by any financial or economic factors and are rather dependent more on market news and other subjective measures like market sentiments and investor trust and fear quotient. 
+
+#Data Limitations
+
+###Limited data:
+Generally, while analyzing asset prices, many years worth of data is taken into consideration. However, for this study, only 3 years of bitcoin price data has been considered. The asset started trading only in 2013, and hence that is the and that is the earliest year for when the data was available.  Data for 2018 has been omitted since most of the price increase was driven by hubris and was leading to skewed results.
+
+###Correlation between groups:
+There are some studies, which indicate that alt coins follow the price of bitcoins. Thus, there may be some correlation between the groups.
+
+###Wild fluctuations:
+Since this asset/currency is relatively new on the market, the prices are highly volatile and fluctuate wildly based on low to high impact news items. Sometimes the volatility is based purely on herd mentality and no predictors can explain that.
+
+##Implication
+Though the model produced results that were statistically significant, the stock indices and other financial and economic indicators that were considered as predictors in the model may not have big impact on the cryptocurrency prices. The volatility of the cryptocurrency market is unpredictable to a certain extent, with respect to these predictors.
+
+##Conclusion
+As future steps, the model may be more accurate in its predictions with the inclusion of certain subjective variables such as market news, government policies, regulation on cryptocurrencies, fear quotient and trust of investors, etc. Even a minor possibility of a policy change by a particular government can impact the bitcoin prices exponentially. Without any doubt, any news on regulation of bitcoins is one of the most important factors that impact its price. Understanding positive or negative news and being able to quantify the impact of the same can be extremely useful in furthering the utility of this study. Similarly, doing sentiment analysis that leads to hubris/herd mentality that drive a large part of bitcoin prices can be extremely useful in understanding the drivers of bitcoin prices.
+
+
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+$~$
+
+#References
+
+1. What is Cryptocurrency. Guide for Beginners. 2013-2018. Cointelegraph.
+   https://cointelegraph.com/bitcoin-for-beginners/what-are-cryptocurrencies
+   
+2. Nakamoto, Satoshi. Bitcoin - A Peer-to-Peer Electronic Cash System. 2009.
+   https://bitcoin.org/bitcoin.pdf
+   
+3. Wallace, Benjamin. The Rise and Fall of Bitcoin. Nov 23, 2011. Wired.
+   https://www.wired.com/2011/11/mf-bitcoin/
+   
+4. Kristoufek, Ladislav. What are the main drivers of the Bitcoin price? Evidence from the Wavelet Coherence        Analysis. April 15, 2015. Plos|One. 
+   https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0123923
+   
+5. Wang, Sha and Vergne, Jean-Philippe. Buzz Factor or Innovation Potential: What Explains Cryptocurrencies'        Returns?
+   https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0169556
+   
+   
+   
+#Appendix
+A1. Distributions of Altcoin Prices from 2014 to 2017
+$~$
+
+```{r, fig.height=2, fig.width=3, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+ggplot(btc, aes(btc$LTC_price))+
+  geom_histogram(fill = "springgreen3", color = "springgreen4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Litecoin Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.1. Histogram of Litecoin Price")
+
+ggplot(btc, aes(btc$ETH_price))+
+  geom_histogram(fill = "orange2", color = "orange4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Ethereum Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.2. Histogram of Ethereum Price")
+
+ggplot(btc, aes(btc$Ripple_price))+
+  geom_histogram(fill = "steelblue3", color = "steelblue4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Ripple Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.3. Histogram of Ripple Price")
+
+ggplot(btc, aes(btc$Doge_price))+
+  geom_histogram(fill = "mediumorchid3", color = "mediumorchid4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Dogecoin Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.4. Histogram of Dogecoin Price")
+
+ggplot(btc, aes(btc$Dash_price))+
+  geom_histogram(fill = "red1", color = "red4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Dash Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.5. Histogram of Dash Price")
+
+ggplot(btc, aes(btc$Monero_price))+
+  geom_histogram(fill = "seagreen3", color = "seagreen4", alpha = 0.6)+
+  theme_light()+
+  theme(axis.title = element_text(size = 7), plot.title = element_text(size = 7),
+        axis.text = element_text(size = 7))+
+  xlab("Monero Price (USD)")+ ylab("Count")+
+  ggtitle("Fig A1.6. Histogram of Monero Price")
+```
+
+$~$
+A2. Plots of Bitcoin Prices and independent variables over time
+$~$
+
+```{r, fig.height=2, fig.width=3, echo=FALSE, message=FALSE, warning=FALSE, fig.show='hold'}
+#Plot of Bitcoin Price and Dow Jones Index
+g1 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "palevioletred2", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = `DJI Adj Close`/10), color = "palevioletred4")+
+  scale_y_continuous(sec.axis = sec_axis(~.*10,name = "Index Value (USD)"))+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 7))+
+  ggtitle("A2.1. Bitcoin Price and Dow Jones Index from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1900), label = "DJI", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 400), label = "Bitcoin", size = 2)
+g1
+
+#Plot of Bitcoin Price and Gold Price
+g4 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "goldenrod1", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = GoldDailyperOunce), color = "goldenrod4")+
+  scale_y_continuous(sec.axis = sec_axis(~.,name = "Gold Price per Ounce (USD)"))+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 7))+
+  ggtitle("A2.2. Bitcoin Price and Commodity Prices from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 1250), label = "Gold", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 400), label = "Bitcoin", size = 2)
+g4
+
+#Plot of Bitcoin Price and Crude Oil Price
+g5 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "gray77", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = CrudeOil*10), color = "gray20")+
+  scale_y_continuous(sec.axis = sec_axis(~./10,name = "Crude Oil Price (USD)"))+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 7))+
+  ggtitle("Bitcoin Price and Crude Oil Price from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 650), label = "Crude Oil", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 350), label = "Bitcoin", size = 2)
+g5
+
+#Plot of Bitcoin Price and Real Estate ETF Rates
+g6 <- ggplot(btc)+
+  geom_histogram(aes(x = time, y = BTC_price),color = "darkorange", stat = "identity")+
+  xlab("Number of Years since 2013")+ ylab("Bitcoin Price(USD)")+
+  geom_line(aes(x = time, y = RealEst*10), color = "darkorange4")+
+  scale_y_continuous(sec.axis = sec_axis(~./10,name = "Real Estate ETF (USD)"))+
+  theme_light()+
+  theme(axis.title = element_text(size = 7),
+        axis.text = element_text(size = 7), plot.title = element_text(size = 7))+
+  ggtitle("Bitcoin Price and Real Estate ETF Rate from 2014 to 2017")+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 700), label = "Real Estate ETF", size = 2)+
+  geom_text(data = btc[btc$time == 1.5,], aes(x = 1.5, y = 350), label = "Bitcoin", size = 2)
+g6
+```
+$~$
+
+A3. Predicted Values
+```{r}
+print.data.frame(prediction)
+```
