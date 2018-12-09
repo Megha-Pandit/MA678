@@ -744,3 +744,5 @@ A3. Predicted Values
 ```{r}
 print.data.frame(prediction)
 ```
+
+The GitHub link to the code behind this project: https://github.com/Megha-Pandit/MA678/tree/master/Mid-Term%20Project
