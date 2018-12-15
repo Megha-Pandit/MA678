@@ -1,0 +1,289 @@
+---
+title: "MA678 homework 09"
+author: "Megha Pandit"
+date: "November 10, 2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+library(arm)
+library(data.table)
+library(foreign)
+library(car)
+library(stringr)
+library(rstan)
+library(zoo)
+library(R2WinBUGS)
+
+coefplot_my <- function(model){
+  toc <- summary(model)$coef
+  tab <- data.table(toc)
+  tab$coefnames <- rownames(toc)
+  tab<-subset(tab,coefnames!="(Intercept)")
+  ggplot(tab) + geom_point() + 
+    geom_pointrange(aes(ymax = Estimate + 2*`Std. Error` , ymin=Estimate - 2*`Std. Error`),lwd=0.2)+
+    aes( y=Estimate, x=coefnames)+geom_pointrange(aes(ymax = Estimate + `Std. Error` , ymin=Estimate - `Std. Error`))+
+    geom_hline(yintercept=0,lty	=2)+xlab("coefficients")+ylab("estimate +/- 2 Std.Error")+
+    scale_x_discrete(limits=tab$coefnames)+ 
+    coord_flip()
+}
+```
+
+
+# presidential preference and income for the 1992 election
+
+The folder `nes` contains the survey data of presidential preference and income for the 1992 election analyzed in Section 5.1, along with other variables including sex, ethnicity, education, party identification, political ideology, and state.
+
+1. Fit a logistic regression predicting support for Bush given all these inputs except state. Consider how to include these as regression predictors and also consider possible interactions.
+
+```{r,echo=FALSE}
+library(foreign)
+brdata <- read.dta("http://www.stat.columbia.edu/~gelman/arm/examples/nes/nes5200_processed_voters_realideo.dta",convert.factors=F)
+brdata <- brdata[is.na(brdata$black)==FALSE&is.na(brdata$female)==FALSE&is.na(brdata$educ1)==FALSE
+                 &is.na(brdata$age)==FALSE&is.na(brdata$income)==FALSE&is.na(brdata$state)==FALSE,]
+kept.cases <- 1952:2000
+matched.cases <- match(brdata$year, kept.cases)
+keep       <- !is.na(matched.cases)
+data       <- brdata[keep,]
+plotyear   <- unique(sort(data$year))
+year.new   <- match(data$year,unique(data$year))
+n.year     <- length(unique(data$year))
+income.new <- data$income - 3
+age.new    <- (data$age-mean(data$age))/10
+y          <- data$rep_pres_intent
+data       <- cbind(data, year.new, income.new, age.new, y)
+nes.year   <- data[,"year"]
+age.discrete <- as.numeric (cut (data[,"age"], c(0,29.5, 44.5, 64.5, 200)))
+race.adj     <- ifelse (data[,"race"]>=3, 1.5, data[,"race"])
+data        <- cbind (data, age.discrete, race.adj)
+
+data$female <- data[,"gender"] - 1
+data$black <- ifelse (data[,"race"]==2, 1, 0)
+data$rvote <- ifelse (data[,"presvote"]==1, 0, ifelse(data[,"presvote"]==2, 1, NA))
+
+```
+
+```{r}
+m1 <- glm(rvote ~ age + female + educ1 + income + occup1 + partyid7, data = data,
+              family = binomial(link = logit))
+summary(m1)
+```
+The model seems to give coefficient estimates that are statistically significant at two standard errors. 
+
+2.  Now formulate a model predicting support for Bush given the same inputs but allowing the intercept to vary over state. Fit using `lmer()` and discuss your results.
+
+```{r,echo=FALSE}
+m2 <- lmer(rvote ~ age + female + educ1 + income + occup1 + partyid7 + (1 | state), data = data)
+summary(m2)
+```
+
+3. Create graphs of the probability of choosing Bush given the linear predictor associated with your model separately for each of eight states as in Figure 14.2.
+
+```{r,echo=FALSE}
+
+```
+
+
+
+## Three-level logistic regression: 
+
+the folder `rodents` contains data on rodents in a sample of New York City apartments.
+
+1. Build a varying intercept logistic regression model (varying over buildings) to predict the presence of rodents (the variable rodent2 in the dataset) given indicators for the ethnic groups (race) as well as other potentially relevant predictors describing the apartment and building. Fit this model using lmer() and interpret the coefficients at both levels.
+
+```{r,echo=FALSE}
+apt.subset.data <- read.table ("http://www.stat.columbia.edu/~gelman/arm/examples/rodents/rodents.dat", header=TRUE)
+apt_dt <- data.table(apt.subset.data)
+
+invisible(apt_dt[,asian := race==5 | race==6 | race==7])
+invisible(apt_dt[,black := race==2])
+invisible(apt_dt[,hisp  := race==3 | race==4])
+```
+
+```{r}
+m3 <- lmer(rodent2 ~ race + stories + scale(totincom2) + housing + poverty + (1|bldg), data = apt_dt)
+summary(m3)
+``` 
+
+2. Now extend the model in (1) to allow variation across buildings within community district and then across community districts. Also include predictors describing the community districts. Fit this model using lmer() and interpret the coefficients at all levels.
+
+```{r}
+
+
+```
+
+3. Compare the fit of the models in (1) and (2).
+
+```{r}
+
+
+```
+
+## Item-response model: 
+
+the folder `exam` contains data on students' success or failure (item correct or incorrect) on a number of test items. Write the notation for an item-response model for the ability of each student and level of difficulty of each item.
+
+```{r,echo=FALSE}
+# Read in the data from an excel-format ".csv" file
+exam.data.raw <- read.table("http://www.stat.columbia.edu/~gelman/arm/examples/exam/mtermgrades.txt", header=FALSE)
+
+```
+
+##  Multilevel logistic regression 
+
+The folder `speed.dating` contains data from an experiment on a few hundred students that randomly assigned each participant to 10 short dates with participants of the opposite sex (Fisman et al., 2006). For each date, each person recorded several subjective numerical ratings of the other person (attractiveness, compatibility, and some other characteristics) and also wrote down whether he or she would like to meet the other person again. Label $y_{ij} = 1$ if person $i$ is interested in seeing person $j$ again $0$ otherwise.
+And $r_{ij1},\dots, r_{ij6}$ as person $i$'s numerical ratings of person $j$ on the dimensions of attractiveness, compatibility, and so forth.
+Please look at 
+http://www.stat.columbia.edu/~gelman/arm/examples/speed.dating/Speed%20Dating%20Data%20Key.doc
+for details.
+
+```{r}
+dating<-fread("http://www.stat.columbia.edu/~gelman/arm/examples/speed.dating/Speed%20Dating%20Data.csv")
+
+```
+
+1. Fit a classical logistic regression predicting $Pr(y_{ij} = 1)$ given person $i$'s 6 ratings of person $j$. Discuss the importance of attractiveness, compatibility, and so forth in this predictive model.
+
+```{r}
+model1 <- glm(match ~ attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o, data = dating,
+             family = binomial)
+summary(model1)
+```
+
+From the fitted model,
+$Log odds (match = 1) = -5.62 + 0.22attr_o - 0.02sinc_o + 0.25fun_o - 0.12amb_o + 0.07intel_o + 0.21shar_o$
+Therefore,
+a unit increase in attractiveness will lead to an increase of $\frac{0.22}{4} = 0.055$ or 5.5% in the willingness to have another date.
+
+Similarly, a unit increase in sincerity decreases the willingness to have another date by $\frac{0.02}{4} = 0.005$ or 0.5%. But this coefficient is not statistically significant at two standard errors and hence may not be influential in switching the willingness for another date from 1 to 0. 
+
+One unit increase in humor increases the willingness for another date by $\frac{0.25}{4} = 0.0625$ or 6.25%.
+
+One unit increase in ambition decreases the willingness for another date by $\frac{0.12}{4} = 0.03$ or 3%.
+
+A unit increase in intelligence increases the willingness to have another date by $\frac{0.07}{4} = 0.0175$ or 1.75%.
+
+One unit increase in shared interest increases the willingness to have anotehr date by $\frac{0.21}{4} = 0.0525$ or 5.25%.
+
+$~$
+2. Expand this model to allow varying intercepts for the persons making the evaluation; that is, some people are more likely than others to want to meet someone again. Discuss the fitted model.
+
+```{r}
+model2 <- glmer(match ~ scale(attr_o) + scale(sinc_o) + scale(fun_o) + scale(amb_o) + scale(intel_o) + scale(shar_o) + gender + (1|iid), data = dating,
+             family = binomial)
+summary(model2)
+```
+
+Fixed Effects:
+$log odds (match=1) = -2.13 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+one unit increase in attractiveness increases the willingness to have another date by $\frac{0.46}{4} = 0.115$ or 11.5%.
+
+one unit increase in sincerity decreases the willingness for another date by $\frac{0.02}{4} = 0.005$ or 0.5%.
+
+a unit increase in humor increases the willingness to have another date by $\frac{0.51}{4} = 0.1275$ or 12.75%.
+
+one unit increase in ambition decreases the willingness to have another date by $\frac{0.23}{4} = 0.0575$ or 5.75%.
+
+one unit increase in intelligence increases the willingness for another date by $\frac{0.11}{4} = 0.0275$ 0r 2.75%.
+
+a unit increase in shared interest increases the willingness to have another date by $\frac{0.48}{4} = 0.12$ or 12%.
+
+Compared to a female dating partner, a male partner is $\frac{0.15}{4} = 0.0375$ or 3.75% more likely to have another date. 
+
+Random Effects:
+For person 1: 
+$log odds (match=1) = -1.64 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 2:
+$log odds (match=1) = -2.13 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 3:
+$log odds (match=1) = -2.54 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 4:
+$log odds (match=1) = -2.24 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+$~$
+
+3. Expand further to allow varying intercepts for the persons being rated. Discuss the fitted model.
+
+```{r}
+model3 <- glmer(match ~ scale(attr_o) + scale(sinc_o) + scale(fun_o) + scale(amb_o) + scale(intel_o) + scale(shar_o) + gender + (1|iid) + (1|pid), data = dating, family = binomial)
+summary(model3)
+```
+
+All the coefficients estimates, except the ones for sincerity and gender, seem to be significant at two standard errors. 
+$~$
+
+4. You will now fit some models that allow the coefficients for attractiveness, compatibility, and the other attributes to vary by person. Fit a no-pooling model: for each person i, fit a logistic regression to the data $y_{ij}$ for the 10 persons j whom he or she rated, using as predictors the 6 ratings $r_{ij1},\dots,r_{ij6}$ . (Hint: with 10 data points and 6 predictors, this model is difficult to fit. You will need to simplify it in some way to get reasonable fits.)
+```{r, include=FALSE}
+model4 <- glm(match ~ attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o + factor(iid)-1,
+              data = dating)
+summary(model4)
+```
+
+
+5. Fit a multilevel model, allowing the intercept and the coefficients for the 6 ratings to vary by the rater i.
+
+```{r}
+model5 <- glm(match ~ (1 + attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o | iid) +
+              attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o, data = dating,
+              family = binomial)
+summary(model5)
+```
+
+6. Compare the inferences from the multilevel model in (5) to the no-pooling model in (4) and the complete-pooling model from part (1) of the previous exercise.
+
+```{r}
+anova(model1, model4, model5)
+```
+
+The AICs of the three models do not differ much from each other. Model 4 seems to be slightly better than the otehr two.
+
+## The well-switching data described in Section 5.4 are in the folder arsenic.
+
+1. Formulate a multilevel logistic regression model predicting the probability of switching using log distance (to nearest safe well) and arsenic level and allowing intercepts to vary across villages. Fit this model using `lmer()` and discuss the results.
+
+```{r,echo=FALSE, include=FALSE}
+
+village <- read.delim("http://www.stat.columbia.edu/~gelman/arm/examples/arsenic/Village.txt",header=TRUE,dec = ",")
+as.double(gsub(",","",village$Best.Longitude))
+ggplot(village)+geom_jitter()+aes(x=long,y=lat)
+wells <- read.table("http://www.stat.columbia.edu/~gelman/arm/examples/arsenic/wells.dat", header=TRUE)
+wells <- read.dta("http://www.stat.columbia.edu/~gelman/arm/examples/arsenic/all.dta",convert.factors=F)
+wells_f <- read.csv("http://www.stat.columbia.edu/~gelman/arm/examples/arsenic/All.csv", header=TRUE)
+wells_f <- read.csv("http://www.stat.columbia.edu/~gelman/arm/examples/arsenic/fulldata1.csv", header=TRUE)
+
+```
+
+```{r}
+
+```
+
+
+2. Extend the model in (1) to allow the coefficient on arsenic to vary across village, as well. Fit this model using `lmer()` and discuss the results.
+
+```{r,echo=FALSE}
+
+
+```
+
+3. Create graphs of the probability of switching wells as a function of arsenic level for eight of the villages.
+
+```{r,echo=FALSE}
+
+
+```
+
+4. Compare the fit of the models in (1) and (2).
+
+```{r,echo=FALSE}
+
+
+```

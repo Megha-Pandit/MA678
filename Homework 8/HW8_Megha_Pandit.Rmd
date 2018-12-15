@@ -1,0 +1,228 @@
+---
+title: "MA684_homework_08"
+author: "Megha Pandit"
+date: "November 10, 2016"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,out.width="0.9\\linewidth",dev="pdf",fig.align  = 'center')
+library(ggplot2)
+library(knitr)
+library(gridExtra)
+library(arm)
+library(data.table)
+library(foreign)
+library(car)
+library(stringr)
+library(rstan)
+library(zoo)
+
+```
+
+
+## Getting to know stan
+Read through the tutorial on Stan
+https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
+
+* Explore Stan website and Stan reference manual and try to connect them with 
+Gelman and Hill 16 - 17.
+
+
+# Data analysis 
+
+## Using stan:
+
+The folder olympics has seven judges' ratings of seven figure skaters (on two criteria: "technical merit" and "artistic impression") from the 1932 Winter Olympics. Take a look at 
+http://www.stat.columbia.edu/~gelman/arm/examples/olympics/olympics1932.txt
+
+```{r,echo=FALSE, fig.width=7,fig.height=3 ,out.width="0.8\\linewidth",message=FALSE}
+olympics1932_na<-read.fwf("http://www.stat.columbia.edu/~gelman/arm/examples/olympics/olympics1932.txt",widths=c(2,14,9,9,9,9,9,9,9),skip=21,header = FALSE)
+colnames(olympics1932_na)<- c("pair", "criterion", "judge_1",  "judge_2",  "judge_3",  "judge_4",  "judge_5" , "judge_6",  "judge_7")
+olympics1932<-na.locf(olympics1932_na)
+olympics1932$criterion<-str_trim(olympics1932$criterion)
+olympics1932$pair<-str_trim(olympics1932$pair)
+ggplot(melt(olympics1932,id.vars=c("pair","criterion")))+geom_point()+aes(x=pair,y=value,group=variable,color=variable)+geom_line()+facet_grid(.~criterion)
+molympics<-data.table(melt(olympics1932,id.vars=c("pair","criterion")))
+molympics$value <- as.double(molympics$value)
+olong <- merge(molympics[seq(1,98,by=2),],molympics[seq(2,98,by=2),],by=c("pair", "variable" ))
+setnames(olong,c( "variable",  "value.x", "value.y"),c("Judge","Program","Performance"))
+olympics_long <- olong[,list(Program,Performance,pair,Judge)]
+head(olympics_long)
+pair_country<-str_trim(read.csv("http://www.stat.columbia.edu/~gelman/arm/examples/olympics/olympics1932.txt",skip=3,nrows = 7,header=FALSE,stringsAsFactors=FALSE)$V3)
+judge_country<-str_trim(read.csv("http://www.stat.columbia.edu/~gelman/arm/examples/olympics/olympics1932.txt",skip=12,nrows = 7,header=FALSE,stringsAsFactors=FALSE)$V2)
+names(pair_country)<-1:7
+names(judge_country)<-paste("judge",1:7,sep="_")
+olympics_long$same_country<-1*(pair_country[olympics_long$pair]==judge_country[olympics_long$Judge])
+```
+
+use stan to fit a non-nested multilevel model (varying across skaters and judges) for the technical merit ratings.
+
+\begin{eqnarray}
+y_i &\sim& N(\mu+\gamma_{j[i]}+\delta_{k[i]},\sigma^2_y),\mbox{ for } i=1,\dots, n\\
+\gamma_{j} &\sim& N(0,\sigma^2_{\gamma}) j=1,\dots, 7\\
+\delta_{k} &\sim& N(0,\sigma^2_{\delta}) k=1,\dots, 7
+\end{eqnarray}
+
+https://github.com/stan-dev/example-models/blob/master/ARM/Ch.17/17.3_flight_simulator.stan
+https://github.com/stan-dev/example-models/blob/master/ARM/Ch.17/17.3_non-nested_models.R
+```{r}
+fit_program<-lmer(Program~1+(1|pair) +  (1|Judge),olympics_long)
+```
+
+```{r}
+dataList.1 <- list(N=49, n_judges=7, n_pairs=7,  judge=as.integer(olympics_long$Judge), pair=as.integer(olympics_long$pair), y=olympics_long$Program)
+                   
+skating_stan<-"
+data {
+  int<lower=0> N;
+  int<lower=0> n_judges;
+  int<lower=0> n_pairs;
+  int<lower=0,upper=n_judges> judge[N];
+  int<lower=0,upper=n_pairs> pair[N];
+  vector[N] y;
+}
+parameters {
+  real<lower=0> sigma;
+  real<lower=0> sigma_gamma;
+  real<lower=0> sigma_delta;
+  vector[n_judges] gamma;
+  vector[n_pairs] delta;
+  real mu;
+}
+model {
+  vector[N] y_hat;
+
+  sigma ~ uniform(0, 100);
+  sigma_gamma ~ uniform(0, 100);
+  sigma_delta ~ uniform(0, 100);
+
+  mu ~ normal(0, 100);
+  
+  gamma ~ normal(0, sigma_gamma);
+  delta ~ normal(0, sigma_delta);
+
+  for (i in 1:N)
+    y_hat[i] = mu + gamma[judge[i]] + delta[pair[i]];
+  y ~ normal(y_hat, sigma);
+}
+"
+```
+
+pilots <- read.table ("http://www.stat.columbia.edu/~gelman/arm/examples/pilots/pilots.dat", header=TRUE)
+
+flight_simulator.sf1 <- stan(   model_code=skating_stan
+, data=dataList.1, iter=2000, chains=4)
+
+
+##  Multilevel logistic regression 
+
+The folder `speed.dating` contains data from an experiment on a few hundred students that randomly assigned each participant to 10 short dates with participants of the opposite sex (Fisman et al., 2006). For each date, each person recorded several subjective numerical ratings of the other person (attractiveness, compatibility, and some other characteristics) and also wrote down whether he or she would like to meet the other person again. Label $y_{ij} = 1$ if person $i$ is interested in seeing person $j$ again $0$ otherwise.
+And $r_{ij1},\dots, r_{ij6}$ as person $i$'s numerical ratings of person $j$ on the dimensions of attractiveness, compatibility, and so forth.
+Please look at 
+http://www.stat.columbia.edu/~gelman/arm/examples/speed.dating/Speed%20Dating%20Data%20Key.doc
+for details.
+
+```{r}
+dating<-fread("http://www.stat.columbia.edu/~gelman/arm/examples/speed.dating/Speed%20Dating%20Data.csv")
+dating_pooled <- glm(match~attr_o +sinc_o +intel_o +fun_o +amb_o +shar_o,data=dating,family=binomial)
+dating_pooled <- glmer(match~gender + attr_o +sinc_o +intel_o +fun_o +amb_o +shar_o+(1|iid)+(1|pid),data=dating,family=binomial)
+```
+
+1. Fit a classical logistic regression predicting $Pr(y_{ij} = 1)$ given person $i$'s 6 ratings of person $j$. Discuss the importance of attractiveness, compatibility, and so forth in this predictive model.
+
+```{r}
+model1 <- glm(match ~ attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o, data = dating,
+             family = binomial)
+summary(model1)
+```
+From the fitted model,
+$Log odds (match = 1) = -5.62 + 0.22attr_o - 0.02sinc_o + 0.25fun_o - 0.12amb_o + 0.07intel_o + 0.21shar_o$
+Therefore,
+a unit increase in attractiveness will lead to an increase of $\frac{0.22}{4} = 0.055$ or 5.5% in the willingness to have another date.
+
+Similarly, a unit increase in sincerity decreases the willingness to have another date by $\frac{0.02}{4} = 0.005$ or 0.5%. But this coefficient is not statistically significant at two standard errors and hence may not be influential in switching the willingness for another date from 1 to 0. 
+
+One unit increase in humor increases the willingness for another date by $\frac{0.25}{4} = 0.0625$ or 6.25%.
+
+One unit increase in ambition decreases the willingness for another date by $\frac{0.12}{4} = 0.03$ or 3%.
+
+A unit increase in intelligence increases the willingness to have another date by $\frac{0.07}{4} = 0.0175$ or 1.75%.
+
+One unit increase in shared interest increases the willingness to have anotehr date by $\frac{0.21}{4} = 0.0525$ or 5.25%.
+
+$~$
+
+2. Expand this model to allow varying intercepts for the persons making the evaluation; that is, some people are more likely than others to want to meet someone again. Discuss the fitted model.
+
+```{r}
+model2 <- glmer(match ~ scale(attr_o) + scale(sinc_o) + scale(fun_o) + scale(amb_o) + scale(intel_o) + scale(shar_o) + gender + (1|iid), data = dating,
+             family = binomial)
+summary(model2)
+```
+Fixed Effects:
+$log odds (match=1) = -2.13 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+one unit increase in attractiveness increases the willingness to have another date by $\frac{0.46}{4} = 0.115$ or 11.5%.
+
+one unit increase in sincerity decreases the willingness for another date by $\frac{0.02}{4} = 0.005$ or 0.5%.
+
+a unit increase in humor increases the willingness to have another date by $\frac{0.51}{4} = 0.1275$ or 12.75%.
+
+one unit increase in ambition decreases the willingness to have another date by $\frac{0.23}{4} = 0.0575$ or 5.75%.
+
+one unit increase in intelligence increases the willingness for another date by $\frac{0.11}{4} = 0.0275$ 0r 2.75%.
+
+a unit increase in shared interest increases the willingness to have another date by $\frac{0.48}{4} = 0.12$ or 12%.
+
+Compared to a female dating partner, a male partner is $\frac{0.15}{4} = 0.0375$ or 3.75% more likely to have another date. 
+
+Random Effects:
+For person 1: 
+$log odds (match=1) = -1.64 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 2:
+$log odds (match=1) = -2.13 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 3:
+$log odds (match=1) = -2.54 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+For person 4:
+$log odds (match=1) = -2.24 + 0.46attr_o - 0.02sinc_o + 0.51fun_o - 0.23amb_o + 0.11intel_o + 0.48shar_o + 0.15gender$
+
+$~$
+
+3. Expand further to allow varying intercepts for the persons being rated. Discuss the fitted model.
+
+```{r}
+model3 <- glmer(match ~ scale(attr_o) + scale(sinc_o) + scale(fun_o) + scale(amb_o) + scale(intel_o) + scale(shar_o) + gender + (1|iid) + (1|pid), data = dating, family = binomial)
+summary(model3)
+```
+All the coefficients estimates, except the ones for sincerity and gender, seem to be significant at two standard errors. 
+
+$~$
+
+4. You will now fit some models that allow the coefficients for attractiveness, compatibility, and the other attributes to vary by person. Fit a no-pooling model: for each person i, fit a logistic regression to the data $y_{ij}$ for the 10 persons j whom he or she rated, using as predictors the 6 ratings $r_{ij1},\dots,r_{ij6}$ . (Hint: with 10 data points and 6 predictors, this model is difficult to fit. You will need to simplify it in some way to get reasonable fits.)
+
+```{r, include=FALSE}
+model4 <- glm(match ~ attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o + factor(iid)-1,
+              data = dating)
+summary(model4)
+```
+
+5. Fit a multilevel model, allowing the intercept and the coefficients for the 6 ratings to vary by the rater i.
+
+```{r}
+model5 <- glm(match ~ (1 + attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o | iid) +
+              attr_o + sinc_o + fun_o + amb_o + intel_o + shar_o, data = dating,
+              family = binomial)
+summary(model5)
+```
+
+6. Compare the inferences from the multilevel model in (5) to the no-pooling model in (4) and the complete-pooling model from part (1) of the previous exercise.
+
+```{r}
+anova(model1, model4, model5)
+```
+The AICs of the three models do not differ much from each other. Model 4 seems to be slightly better than the otehr two. 
